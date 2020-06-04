@@ -1,0 +1,33 @@
+{
+  "name": "skylark-domx-popup",
+  "version": "0.9.0",
+  "description": "The skylark popup utility library for dom api extension.",
+  "main": "-",
+  "scripts": {
+    "build": "sbundle build .",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "homepage": "www.skylarkjs.org",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/skylark-domx/skylark-domx-popup.git"
+  },
+  "keywords": [
+    "skylark",
+    "skylarkjs",
+    "javacript",
+    "library",
+    "utility",
+    "html5"
+  ],
+  "author": "Hudaokeji Co.,Ltd",
+  "license": "MIT",
+  "bugs": "https://github.com/skylark-domx/skylark-domx-popup/issues",
+  "dependencies": {
+    "skylark-domx-geom": "git+https://github.com/skylark-domx/skylark-domx-geom.git#master",
+    "skylark-langx-ns": "git+https://github.com/skylark-langx/skylark-langx-ns.git#master"
+  },
+  "engines": {
+    "node": ">=0.8.0"
+  }
+}
