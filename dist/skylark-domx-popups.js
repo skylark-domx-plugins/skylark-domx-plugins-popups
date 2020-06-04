@@ -1,0 +1,9 @@
+/**
+ * skylark-domx-popups - The skylark popup utility library for dom api extension.
+ * @author Hudaokeji Co.,Ltd
+ * @version v0.9.0
+ * @link www.skylarkjs.org
+ * @license MIT
+ */
+!function(t,o){var e=o.define,require=o.require,r="function"==typeof e&&e.amd,n=!r&&"undefined"!=typeof exports;if(!r&&!e){var i={};e=o.define=function(t,o,e){"function"==typeof e?(i[t]={factory:e,deps:o.map(function(o){return function(t,o){if("."!==t[0])return t;var e=o.split("/"),r=t.split("/");e.pop();for(var n=0;n<r.length;n++)"."!=r[n]&&(".."==r[n]?e.pop():e.push(r[n]));return e.join("/")}(o,t)}),resolved:!1,exports:null},require(t)):i[t]={factory:null,resolved:!0,exports:e}},require=o.require=function(t){if(!i.hasOwnProperty(t))throw new Error("Module "+t+" has not been defined");var module=i[t];if(!module.resolved){var e=[];module.deps.forEach(function(t){e.push(require(t))}),module.exports=module.factory.apply(o,e)||null,module.resolved=!0}return module.exports}}if(!e)throw new Error("The module utility (ex: requirejs or skylark-utils) is not loaded!");if(function(t,require){t("skylark-domx-popups/popups",["skylark-langx-ns"],function(t){return t.attach("domx.popups",{})}),t("skylark-domx-popups/calcOffset",["skylark-domx-geom","./popups"],function(t,o){return o.calcOffset=function(o,e){var r=t.size(o),n=r.width,i=r.height,p=t.height(e),s=o.ownerDocument,u=s.documentElement,a=u.clientWidth+t.scrollLeft(s),l=u.clientHeight+t.scrollTop(s),f=t.pagePosition(e),c=f.left,d=f.top;return d+=p,c-=Math.min(c,c+n>a&&a>n?Math.abs(c+n-a):0),{top:d-=Math.min(d,d+i>l&&l>i?Math.abs(i+p-0):0),bottom:f.bottom,left:c,right:f.right,width:f.width,height:f.height}}}),t("skylark-domx-popups/main",["./popups","./calcOffset"],function(t){return t}),t("skylark-domx-popups",["skylark-domx-popups/main"],function(t){return t})}(e),!r){var p=require("skylark-langx-ns");n?module.exports=p:o.skylarkjs=p}}(0,this);
+//# sourceMappingURL=sourcemaps/skylark-domx-popups.js.map

@@ -1,5 +1,5 @@
 /**
- * skylark-domx-popup - The skylark popup utility library for dom api extension.
+ * skylark-domx-popups - The skylark popup utility library for dom api extension.
  * @author Hudaokeji Co.,Ltd
  * @version v0.9.0
  * @link www.skylarkjs.org
@@ -86,12 +86,12 @@
 
 })(function(define,require) {
 
-define('skylark-domx-popup/popups',[
+define('skylark-domx-popups/popups',[
 	"skylark-langx-ns"
 ],function(skylark){
 	return skylark.attach("domx.popups",{});
 });
-define('skylark-domx-popup/calcOffset',[
+define('skylark-domx-popups/calcOffset',[
 	"skylark-domx-geom",
 	"./popups"
 ],function(
@@ -139,14 +139,14 @@ define('skylark-domx-popup/calcOffset',[
     return popups.calcOffset = calcOffset;
 		
 });
-define('skylark-domx-popup/main',[
+define('skylark-domx-popups/main',[
 	"./popups",
 	"./calcOffset"
 ],function(popups){
 	return popups;
 });
-define('skylark-domx-popup', ['skylark-domx-popup/main'], function (main) { return main; });
+define('skylark-domx-popups', ['skylark-domx-popups/main'], function (main) { return main; });
 
 
 },this);
-//# sourceMappingURL=sourcemaps/skylark-domx-popup.js.map
+//# sourceMappingURL=sourcemaps/skylark-domx-popups.js.map
