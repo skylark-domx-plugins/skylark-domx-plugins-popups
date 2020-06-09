@@ -1,6 +1,8 @@
 define([
 	"./popups",
-	"./calcOffset"
+	"./calcOffset",
+	"./Dropdown",
+	"./SelectList"
 ],function(popups){
 	return popups;
 });

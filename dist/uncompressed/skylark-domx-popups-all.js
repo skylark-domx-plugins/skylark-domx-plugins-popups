@@ -125,7 +125,99 @@ define('skylark-langx-ns', ['skylark-langx-ns/main'], function (main) { return m
 define('skylark-domx-popups/popups',[
 	"skylark-langx-ns"
 ],function(skylark){
-	return skylark.attach("domx.popups",{});
+
+	var stack = [];
+
+
+
+    /**
+    * get the offset below/above and left/right element depending on screen position
+    * Thanks https://github.com/jquery/jquery-ui/blob/master/ui/jquery.ui.datepicker.js
+    */
+    function around(ref) {
+        var extraY = 0;
+        var dpSize = geom.size(popup);
+        var dpWidth = dpSize.width;
+        var dpHeight = dpSize.height;
+        var refHeight = geom.height(ref);
+        var doc = ref.ownerDocument;
+        var docElem = doc.documentElement;
+        var viewWidth = docElem.clientWidth + geom.scrollLeft(doc);
+        var viewHeight = docElem.clientHeight + geom.scrollTop(doc);
+        var offset = geom.pagePosition(ref);
+        var offsetLeft = offset.left;
+        var offsetTop = offset.top;
+
+        offsetTop += refHeight;
+
+        offsetLeft -=
+            Math.min(offsetLeft, (offsetLeft + dpWidth > viewWidth && viewWidth > dpWidth) ?
+            Math.abs(offsetLeft + dpWidth - viewWidth) : 0);
+
+        offsetTop -=
+            Math.min(offsetTop, ((offsetTop + dpHeight > viewHeight && viewHeight > dpHeight) ?
+            Math.abs(dpHeight + refHeight - extraY) : extraY));
+
+        return {
+            top: offsetTop,
+            bottom: offset.bottom,
+            left: offsetLeft,
+            right: offset.right,
+            width: offset.width,
+            height: offset.height
+        };
+    }
+
+
+	/*
+	 * Popup the ui elment at the specified position
+	 * @param popup  element to display
+	 * @param options
+	 *  - around {HtmlEleent}
+	 *  - at {x,y}
+	 *  - parent {}
+	 */
+
+	function open(popup,options) {
+		if (options.around) {
+			//A DOM node that should be used as a reference point for placing the pop-up. 
+		}
+
+	}
+
+	/*
+	 * Close specified popup and any popups that it parented.
+	 * If no popup is specified, closes all popups.
+     */
+	function close(popup) {
+		var count = 0;
+
+		if (popup) {
+			for (var i= stack.length-1; i>=0; i--) {
+				if (stack[i].popup == popup) {
+					count = stack.length - i; 
+					break;
+				}
+			}
+		} else {
+			count = stack.length;
+		}
+		for (var i=0; i<count ; i++ ) {
+			var top = stack.pop(),
+				popup1 = top.popup;
+			if (popup1.hide) {
+				popup1.hide();
+			} else {
+
+			}
+
+		} 
+	}
+	return skylark.attach("domx.popups",{
+		around,
+		open,
+		close
+	});
 });
 define('skylark-langx/skylark',[
     "skylark-langx-ns"
@@ -829,13 +921,15 @@ define('skylark-langx-objects/objects',[
             if (safe && target[key] !== undefined) {
                 continue;
             }
-            if (deep && (isPlainObject(source[key]) || isArray(source[key]))) {
-                if (isPlainObject(source[key]) && !isPlainObject(target[key])) {
+            // if (deep && (isPlainObject(source[key]) || isArray(source[key]))) {
+            //    if (isPlainObject(source[key]) && !isPlainObject(target[key])) {
+            if (deep && isPlainObject(source[key])) {
+                if (!isPlainObject(target[key])) {
                     target[key] = {};
                 }
-                if (isArray(source[key]) && !isArray(target[key])) {
-                    target[key] = [];
-                }
+                //if (isArray(source[key]) && !isArray(target[key])) {
+                //    target[key] = [];
+                //}
                 _mixin(target[key], source[key], deep, safe);
             } else if (source[key] !== undefined) {
                 target[key] = source[key]
@@ -2748,6 +2842,7 @@ define('skylark-langx-events/Listener',[
         isDefined = types.isDefined,
         isPlainObject = types.isPlainObject,
         isFunction = types.isFunction,
+        isBoolean = types.isBoolean,
         isString = types.isString,
         isEmptyObject = types.isEmptyObject,
         mixin = objects.mixin,
@@ -2761,6 +2856,24 @@ define('skylark-langx-events/Listener',[
                 return this;
             }
 
+            if (isBoolean(callback)) {
+                one = callback;
+                callback = null;
+            }
+
+            if (types.isPlainObject(event)){
+                //listenTo(obj,callbacks,one)
+                var callbacks = event;
+                for (var name in callbacks) {
+                    this.listeningTo(obj,name,callbacks[name],one);
+                }
+                return this;
+            }
+
+            if (!callback) {
+                callback = "handleEvent";
+            }
+            
             // Bind callbacks on obj,
             if (isString(callback)) {
                 callback = this[callback];
@@ -2812,7 +2925,7 @@ define('skylark-langx-events/Listener',[
             if (isString(callback)) {
                 callback = this[callback];
             }
-                        
+
             for (var i = 0; i < listeningTo.length; i++) {
                 var listening = listeningTo[i];
 
@@ -8898,9 +9011,2695 @@ define('skylark-domx-popups/calcOffset',[
     return popups.calcOffset = calcOffset;
 		
 });
+define('skylark-domx-data/data',[
+    "skylark-langx/skylark",
+    "skylark-langx/langx",
+    "skylark-domx-finder",
+    "skylark-domx-noder"
+], function(skylark, langx, finder,noder) {
+    var map = Array.prototype.map,
+        filter = Array.prototype.filter,
+        camelCase = langx.camelCase,
+        deserializeValue = langx.deserializeValue,
+
+        capitalRE = /([A-Z])/g,
+        propMap = {
+            'tabindex': 'tabIndex',
+            'readonly': 'readOnly',
+            'for': 'htmlFor',
+            'class': 'className',
+            'maxlength': 'maxLength',
+            'cellspacing': 'cellSpacing',
+            'cellpadding': 'cellPadding',
+            'rowspan': 'rowSpan',
+            'colspan': 'colSpan',
+            'usemap': 'useMap',
+            'frameborder': 'frameBorder',
+            'contenteditable': 'contentEditable'
+        };
+
+    // Strip and collapse whitespace according to HTML spec
+    function stripAndCollapse( value ) {
+      var tokens = value.match( /[^\x20\t\r\n\f]+/g ) || [];
+      return tokens.join( " " );
+    }
+
+
+    var valHooks = {
+      option: {
+        get: function( elem ) {
+          var val = elem.getAttribute( "value" );
+          return val != null ?  val :  stripAndCollapse(text( elem ) );
+        }
+      },
+      select: {
+        get: function( elem ) {
+          var value, option, i,
+            options = elem.options,
+            index = elem.selectedIndex,
+            one = elem.type === "select-one",
+            values = one ? null : [],
+            max = one ? index + 1 : options.length;
+
+          if ( index < 0 ) {
+            i = max;
+
+          } else {
+            i = one ? index : 0;
+          }
+
+          // Loop through all the selected options
+          for ( ; i < max; i++ ) {
+            option = options[ i ];
+
+            if ( option.selected &&
+
+                // Don't return options that are disabled or in a disabled optgroup
+                !option.disabled &&
+                ( !option.parentNode.disabled ||
+                  !noder.nodeName( option.parentNode, "optgroup" ) ) ) {
+
+              // Get the specific value for the option
+              value = val(option);
+
+              // We don't need an array for one selects
+              if ( one ) {
+                return value;
+              }
+
+              // Multi-Selects return an array
+              values.push( value );
+            }
+          }
+
+          return values;
+        },
+
+        set: function( elem, value ) {
+          var optionSet, option,
+            options = elem.options,
+            values = langx.makeArray( value ),
+            i = options.length;
+
+          while ( i-- ) {
+            option = options[ i ];
+
+            /* eslint-disable no-cond-assign */
+
+            if ( option.selected =
+              langx.inArray( valHooks.option.get( option ), values ) > -1
+            ) {
+              optionSet = true;
+            }
+
+            /* eslint-enable no-cond-assign */
+          }
+
+          // Force browsers to behave consistently when non-matching value is set
+          if ( !optionSet ) {
+            elem.selectedIndex = -1;
+          }
+          return values;
+        }
+      }
+    };
+
+
+    // Radios and checkboxes getter/setter
+    langx.each( [ "radio", "checkbox" ], function() {
+      valHooks[ this ] = {
+        set: function( elem, value ) {
+          if ( langx.isArray( value ) ) {
+            return ( elem.checked = langx.inArray( val(elem), value ) > -1 );
+          }
+        }
+      };
+    });
+
+
+
+    /*
+     * Set property values
+     * @param {Object} elm  
+     * @param {String} name
+     * @param {String} value
+     */
+
+    function setAttribute(elm, name, value) {
+        if (value == null) {
+            elm.removeAttribute(name);
+        } else {
+            elm.setAttribute(name, value);
+        }
+    }
+
+    function aria(elm, name, value) {
+        return this.attr(elm, "aria-" + name, value);
+    }
+
+    /*
+     * Set property values
+     * @param {Object} elm  
+     * @param {String} name
+     * @param {String} value
+     */
+
+    function attr(elm, name, value) {
+        if (value === undefined) {
+            if (typeof name === "object") {
+                for (var attrName in name) {
+                    attr(elm, attrName, name[attrName]);
+                }
+                return this;
+            } else {
+                return elm.getAttribute ? elm.getAttribute(name) : elm[name];
+            }
+        } else {
+            elm.setAttribute ? elm.setAttribute(name, value) : elm[name] = value;
+            return this;
+        }
+    }
+
+
+    /*
+     *  Read all "data-*" attributes from a node
+     * @param {Object} elm  
+     */
+
+    function _attributeData(elm) {
+        var store = {}
+        langx.each(elm.attributes || [], function(i, attr) {
+            if (attr.name.indexOf('data-') == 0) {
+                store[camelCase(attr.name.replace('data-', ''))] = deserializeValue(attr.value);
+            }
+        })
+        return store;
+    }
+
+    function _store(elm, confirm) {
+        var store = elm["_$_store"];
+        if (!store && confirm) {
+            store = elm["_$_store"] = _attributeData(elm);
+        }
+        return store;
+    }
+
+    function _getData(elm, name) {
+        if (name === undefined) {
+            return _store(elm, true);
+        } else {
+            var store = _store(elm);
+            if (store) {
+                if (name in store) {
+                    return store[name];
+                }
+                var camelName = camelCase(name);
+                if (camelName in store) {
+                    return store[camelName];
+                }
+            }
+            var attrName = 'data-' + name.replace(capitalRE, "-$1").toLowerCase()
+            return attr(elm, attrName);
+        }
+
+    }
+
+    function _setData(elm, name, value) {
+        var store = _store(elm, true);
+        store[camelCase(name)] = value;
+    }
+
+
+    /*
+     * xxx
+     * @param {Object} elm  
+     * @param {String} name
+     * @param {String} value
+     */
+    function data(elm, name, value) {
+
+        if (value === undefined) {
+            if (typeof name === "object") {
+                for (var dataAttrName in name) {
+                    _setData(elm, dataAttrName, name[dataAttrName]);
+                }
+                return this;
+            } else {
+                return _getData(elm, name);
+            }
+        } else {
+            _setData(elm, name, value);
+            return this;
+        }
+    } 
+    /*
+     * Remove from the element all items that have not yet been run. 
+     * @param {Object} elm  
+     */
+
+    function cleanData(elm) {
+        if (elm["_$_store"]) {
+            delete elm["_$_store"];
+        }
+    }
+
+    /*
+     * Remove a previously-stored piece of data. 
+     * @param {Object} elm  
+     * @param {Array} names
+     */
+    function removeData(elm, names) {
+        if (names) {
+            if (langx.isString(names)) {
+                names = names.split(/\s+/);
+            }
+            var store = _store(elm, true);
+            names.forEach(function(name) {
+                delete store[name];
+            });            
+        } else {
+            cleanData(elm);
+        }
+        return this;
+    }
+
+    /*
+     * xxx 
+     * @param {Object} elm  
+     * @param {Array} names
+     */
+    function pluck(nodes, property) {
+        return map.call(nodes, function(elm) {
+            return elm[property];
+        });
+    }
+
+    /*
+     * Get or set the value of an property for the specified element.
+     * @param {Object} elm  
+     * @param {String} name
+     * @param {String} value
+     */
+    function prop(elm, name, value) {
+        name = propMap[name] || name;
+        if (value === undefined) {
+            return elm[name];
+        } else {
+            elm[name] = value;
+            return this;
+        }
+    }
+
+    /*
+     * remove Attributes  
+     * @param {Object} elm  
+     * @param {String} name
+     */
+    function removeAttr(elm, name) {
+        name.split(' ').forEach(function(attr) {
+            setAttribute(elm, attr);
+        });
+        return this;
+    }
+
+
+    /*
+     * Remove the value of a property for the first element in the set of matched elements or set one or more properties for every matched element.
+     * @param {Object} elm  
+     * @param {String} name
+     */
+    function removeProp(elm, name) {
+        name.split(' ').forEach(function(prop) {
+            delete elm[prop];
+        });
+        return this;
+    }
+
+    /*   
+     * Get the combined text contents of each element in the set of matched elements, including their descendants, or set the text contents of the matched elements.  
+     * @param {Object} elm  
+     * @param {String} txt
+     */
+    function text(elm, txt) {
+        if (txt === undefined) {
+            return elm.textContent;
+        } else {
+            elm.textContent = txt == null ? '' : '' + txt;
+            return this;
+        }
+    }
+
+    /*   
+     * Get the current value of the first element in the set of matched elements or set the value of every matched element.
+     * @param {Object} elm  
+     * @param {String} value
+     */
+    function val(elm, value) {
+        var hooks = valHooks[ elm.type ] || valHooks[ elm.nodeName.toLowerCase() ];
+        if (value === undefined) {
+/*
+            if (elm.multiple) {
+                // select multiple values
+                var selectedOptions = filter.call(finder.find(elm, "option"), (function(option) {
+                    return option.selected;
+                }));
+                return pluck(selectedOptions, "value");
+            } else {
+                if (/input|textarea/i.test(elm.tagName)) {
+                  return elm.value;
+                }
+                return text(elm);
+            }
+*/
+
+          if ( hooks &&  "get" in hooks &&  ( ret = hooks.get( elm, "value" ) ) !== undefined ) {
+            return ret;
+          }
+
+          ret = elm.value;
+
+          // Handle most common string cases
+          if ( typeof ret === "string" ) {
+            return ret.replace( /\r/g, "" );
+          }
+
+          // Handle cases where value is null/undef or number
+          return ret == null ? "" : ret;
+
+        } else {
+/*          
+            if (/input|textarea/i.test(elm.tagName)) {
+              elm.value = value;
+            } else {
+              text(elm,value);
+            }
+            return this;
+*/
+          // Treat null/undefined as ""; convert numbers to string
+          if ( value == null ) {
+            value = "";
+
+          } else if ( typeof value === "number" ) {
+            value += "";
+
+          } else if ( langx.isArray( value ) ) {
+            value = langx.map( value, function( value1 ) {
+              return value1 == null ? "" : value1 + "";
+            } );
+          }
+
+          // If set returns undefined, fall back to normal setting
+          if ( !hooks || !( "set" in hooks ) || hooks.set( elm, value, "value" ) === undefined ) {
+            elm.value = value;
+          }
+        }      
+    }
+
+
+    finder.pseudos.data = function( elem, i, match,dataName ) {
+        return !!data( elem, dataName || match[3]);
+    };
+   
+
+    function datax() {
+        return datax;
+    }
+
+    langx.mixin(datax, {
+        aria: aria,
+
+        attr: attr,
+
+        cleanData: cleanData,
+
+        data: data,
+
+        pluck: pluck,
+
+        prop: prop,
+
+        removeAttr: removeAttr,
+
+        removeData: removeData,
+
+        removeProp: removeProp,
+
+        text: text,
+
+        val: val,
+
+        valHooks : valHooks
+    });
+
+    return skylark.attach("domx.data", datax);
+});
+define('skylark-domx-data/main',[
+    "./data",
+    "skylark-domx-velm",
+    "skylark-domx-query"    
+],function(data,velm,$){
+    // from ./data
+    velm.delegate([
+        "attr",
+        "data",
+        "prop",
+        "removeAttr",
+        "removeData",
+        "text",
+        "val"
+    ], data);
+
+    $.fn.text = $.wraps.wrapper_value(data.text, data, data.text);
+
+    $.fn.attr = $.wraps.wrapper_name_value(data.attr, data, data.attr);
+
+    $.fn.removeAttr = $.wraps.wrapper_every_act(data.removeAttr, data);
+
+    $.fn.prop = $.wraps.wrapper_name_value(data.prop, data, data.prop);
+
+    $.fn.removeProp = $.wraps.wrapper_every_act(data.removeProp, data);
+
+    $.fn.data = $.wraps.wrapper_name_value(data.data, data);
+
+    $.fn.removeData = $.wraps.wrapper_every_act(data.removeData);
+
+    $.fn.val = $.wraps.wrapper_value(data.val, data, data.val);
+
+
+    return data;
+});
+define('skylark-domx-data', ['skylark-domx-data/main'], function (main) { return main; });
+
+define('skylark-domx-eventer/eventer',[
+    "skylark-langx/skylark",
+    "skylark-langx/langx",
+    "skylark-domx-browser",
+    "skylark-domx-finder",
+    "skylark-domx-noder",
+    "skylark-domx-data"
+], function(skylark, langx, browser, finder, noder, datax) {
+    var mixin = langx.mixin,
+        each = langx.each,
+        slice = Array.prototype.slice,
+        uid = langx.uid,
+        ignoreProperties = /^([A-Z]|returnValue$|layer[XY]$)/,
+        eventMethods = {
+            preventDefault: "isDefaultPrevented",
+            stopImmediatePropagation: "isImmediatePropagationStopped",
+            stopPropagation: "isPropagationStopped"
+        },
+        readyRE = /complete|loaded|interactive/;
+
+    function compatible(event, source) {
+        if (source || !event.isDefaultPrevented) {
+            if (!source) {
+                source = event;
+            }
+
+            langx.each(eventMethods, function(name, predicate) {
+                var sourceMethod = source[name];
+                event[name] = function() {
+                    this[predicate] = langx.returnTrue;
+                    return sourceMethod && sourceMethod.apply(source, arguments);
+                }
+                event[predicate] = langx.returnFalse;
+            });
+        }
+        return event;
+    }
+
+    function parse(event) {
+        var segs = ("" + event).split(".");
+        return {
+            type: segs[0],
+            ns: segs.slice(1).sort().join(" ")
+        };
+    }
+
+
+    var NativeEventCtors = [
+            window["CustomEvent"], // 0 default
+            window["CompositionEvent"], // 1
+            window["DragEvent"], // 2
+            window["Event"], // 3
+            window["FocusEvent"], // 4
+            window["KeyboardEvent"], // 5
+            window["MessageEvent"], // 6
+            window["MouseEvent"], // 7
+            window["MouseScrollEvent"], // 8
+            window["MouseWheelEvent"], // 9
+            window["MutationEvent"], // 10
+            window["ProgressEvent"], // 11
+            window["TextEvent"], // 12
+            window["TouchEvent"], // 13
+            window["UIEvent"], // 14
+            window["WheelEvent"], // 15
+            window["ClipboardEvent"] // 16
+        ],
+        NativeEvents = {
+            "compositionstart": 1, // CompositionEvent
+            "compositionend": 1, // CompositionEvent
+            "compositionupdate": 1, // CompositionEvent
+
+            "beforecopy": 16, // ClipboardEvent
+            "beforecut": 16, // ClipboardEvent
+            "beforepaste": 16, // ClipboardEvent
+            "copy": 16, // ClipboardEvent
+            "cut": 16, // ClipboardEvent
+            "paste": 16, // ClipboardEvent
+
+            "drag": 2, // DragEvent
+            "dragend": 2, // DragEvent
+            "dragenter": 2, // DragEvent
+            "dragexit": 2, // DragEvent
+            "dragleave": 2, // DragEvent
+            "dragover": 2, // DragEvent
+            "dragstart": 2, // DragEvent
+            "drop": 2, // DragEvent
+
+            "abort": 3, // Event
+            "change": 3, // Event
+            "error": 3, // Event
+            "selectionchange": 3, // Event
+            "submit": 3, // Event
+            "reset": 3, // Event
+
+            "focus": 4, // FocusEvent
+            "blur": 4, // FocusEvent
+            "focusin": 4, // FocusEvent
+            "focusout": 4, // FocusEvent
+
+            "keydown": 5, // KeyboardEvent
+            "keypress": 5, // KeyboardEvent
+            "keyup": 5, // KeyboardEvent
+
+            "message": 6, // MessageEvent
+
+            "click": 7, // MouseEvent
+            "contextmenu": 7, // MouseEvent
+            "dblclick": 7, // MouseEvent
+            "mousedown": 7, // MouseEvent
+            "mouseup": 7, // MouseEvent
+            "mousemove": 7, // MouseEvent
+            "mouseover": 7, // MouseEvent
+            "mouseout": 7, // MouseEvent
+            "mouseenter": 7, // MouseEvent
+            "mouseleave": 7, // MouseEvent
+
+
+            "textInput": 12, // TextEvent
+
+            "touchstart": 13, // TouchEvent
+            "touchmove": 13, // TouchEvent
+            "touchend": 13, // TouchEvent
+
+            "load": 14, // UIEvent
+            "resize": 14, // UIEvent
+            "select": 14, // UIEvent
+            "scroll": 14, // UIEvent
+            "unload": 14, // UIEvent,
+
+            "wheel": 15 // WheelEvent
+        };
+
+    //create a custom dom event
+    var createEvent = (function() {
+
+        function getEventCtor(type) {
+            var idx = NativeEvents[type];
+            if (!idx) {
+                idx = 0;
+            }
+            return NativeEventCtors[idx];
+        }
+
+        return function(type, props) {
+            //create a custom dom event
+
+            if (langx.isString(type)) {
+                props = props || {};
+            } else {
+                props = type || {};
+                type = props.type || "";
+            }
+            var parsed = parse(type);
+            type = parsed.type;
+
+            props = langx.mixin({
+                bubbles: true,
+                cancelable: true
+            }, props);
+
+            if (parsed.ns) {
+                props.namespace = parsed.ns;
+            }
+
+            var ctor = getEventCtor(type),
+                e = new ctor(type, props);
+
+            langx.safeMixin(e, props);
+
+            return compatible(e);
+        };
+    })();
+
+    function createProxy(src, props) {
+        var key,
+            proxy = {
+                originalEvent: src
+            };
+        for (key in src) {
+            if (key !== "keyIdentifier" && !ignoreProperties.test(key) && src[key] !== undefined) {
+                proxy[key] = src[key];
+            }
+        }
+        if (props) {
+            langx.mixin(proxy, props);
+        }
+        return compatible(proxy, src);
+    }
+
+    var
+        specialEvents = {},
+        focusinSupported = "onfocusin" in window,
+        focus = { focus: "focusin", blur: "focusout" },
+        hover = { mouseenter: "mouseover", mouseleave: "mouseout" },
+        realEvent = function(type) {
+            return hover[type] || (focusinSupported && focus[type]) || type;
+        },
+        handlers = {},
+        EventBindings = langx.klass({
+            init: function(target, event) {
+                this._target = target;
+                this._event = event;
+                this._bindings = [];
+            },
+
+            add: function(fn, options) {
+                var bindings = this._bindings,
+                    binding = {
+                        fn: fn,
+                        options: langx.mixin({}, options)
+                    };
+
+                bindings.push(binding);
+
+                var self = this;
+                if (!self._listener) {
+                    self._listener = function(domEvt) {
+                        var elm = this,
+                            e = createProxy(domEvt),
+                            args = domEvt._args,
+                            bindings = self._bindings,
+                            ns = e.namespace;
+
+                        if (langx.isDefined(args)) {
+                            args = [e].concat(args);
+                        } else {
+                            args = [e];
+                        }
+
+                        langx.each(bindings, function(idx, binding) {
+                            var match = elm;
+                            if (e.isImmediatePropagationStopped && e.isImmediatePropagationStopped()) {
+                                return false;
+                            }
+                            var fn = binding.fn,
+                                options = binding.options || {},
+                                selector = options.selector,
+                                one = options.one,
+                                data = options.data;
+
+                            if (ns && ns != options.ns && options.ns.indexOf(ns) === -1) {
+                                return;
+                            }
+                            if (selector) {
+                                match = finder.closest(e.target, selector);
+                                if (match && match !== elm) {
+                                    langx.mixin(e, {
+                                        currentTarget: match,
+                                        liveFired: elm
+                                    });
+                                } else {
+                                    return;
+                                }
+                            }
+
+                            var originalEvent = self._event;
+                            if (originalEvent in hover) {
+                                var related = e.relatedTarget;
+                                if (related && (related === match || noder.contains(match, related))) {
+                                    return;
+                                }
+                            }
+
+                            if (langx.isDefined(data)) {
+                                e.data = data;
+                            }
+
+                            if (one) {
+                                self.remove(fn, options);
+                            }
+
+                            var result = fn.apply(match, args);
+
+                            if (result === false) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                            }
+                        });;
+                    };
+
+                    var event = self._event;
+                    /*
+                                        if (event in hover) {
+                                            var l = self._listener;
+                                            self._listener = function(e) {
+                                                var related = e.relatedTarget;
+                                                if (!related || (related !== this && !noder.contains(this, related))) {
+                                                    return l.apply(this, arguments);
+                                                }
+                                            }
+                                        }
+                    */
+
+                    if (self._target.addEventListener) {
+                        self._target.addEventListener(realEvent(event), self._listener, false);
+                    } else {
+                        console.warn("invalid eventer object", self._target);
+                    }
+                }
+
+            },
+            remove: function(fn, options) {
+                options = langx.mixin({}, options);
+
+                function matcherFor(ns) {
+                    return new RegExp("(?:^| )" + ns.replace(" ", " .* ?") + "(?: |$)");
+                }
+                var matcher;
+                if (options.ns) {
+                    matcher = matcherFor(options.ns);
+                }
+
+                this._bindings = this._bindings.filter(function(binding) {
+                    var removing = (!fn || fn === binding.fn) &&
+                        (!matcher || matcher.test(binding.options.ns)) &&
+                        (!options.selector || options.selector == binding.options.selector);
+
+                    return !removing;
+                });
+                if (this._bindings.length == 0) {
+                    if (this._target.removeEventListener) {
+                        this._target.removeEventListener(realEvent(this._event), this._listener, false);
+                    }
+                    this._listener = null;
+                }
+            }
+        }),
+        EventsHandler = langx.klass({
+            init: function(elm) {
+                this._target = elm;
+                this._handler = {};
+            },
+
+            // add a event listener
+            // selector Optional
+            register: function(event, callback, options) {
+                // Seperate the event from the namespace
+                var parsed = parse(event),
+                    event = parsed.type,
+                    specialEvent = specialEvents[event],
+                    bindingEvent = specialEvent && (specialEvent.bindType || specialEvent.bindEventName);
+
+                var events = this._handler;
+
+                // Check if there is already a handler for this event
+                if (events[event] === undefined) {
+                    events[event] = new EventBindings(this._target, bindingEvent || event);
+                }
+
+                // Register the new callback function
+                events[event].add(callback, langx.mixin({
+                    ns: parsed.ns
+                }, options)); // options:{selector:xxx}
+            },
+
+            // remove a event listener
+            unregister: function(event, fn, options) {
+                // Check for parameter validtiy
+                var events = this._handler,
+                    parsed = parse(event);
+                event = parsed.type;
+
+                if (event) {
+                    var listener = events[event];
+
+                    if (listener) {
+                        listener.remove(fn, langx.mixin({
+                            ns: parsed.ns
+                        }, options));
+                    }
+                } else {
+                    //remove all events
+                    for (event in events) {
+                        var listener = events[event];
+                        listener.remove(fn, langx.mixin({
+                            ns: parsed.ns
+                        }, options));
+                    }
+                }
+            }
+        }),
+
+        findHandler = function(elm) {
+            var id = uid(elm),
+                handler = handlers[id];
+            if (!handler) {
+                handler = handlers[id] = new EventsHandler(elm);
+            }
+            return handler;
+        };
+
+    /*   
+     * Remove an event handler for one or more events from the specified element.
+     * @param {HTMLElement} elm  
+     * @param {String} events
+     * @param {String　Optional } selector
+     * @param {Function} callback
+     */
+    function off(elm, events, selector, callback) {
+        var $this = this
+        if (langx.isPlainObject(events)) {
+            langx.each(events, function(type, fn) {
+                off(elm, type, selector, fn);
+            })
+            return $this;
+        }
+
+        if (!langx.isString(selector) && !langx.isFunction(callback) && callback !== false) {
+            callback = selector;
+            selector = undefined;
+        }
+
+        if (callback === false) {
+            callback = langx.returnFalse;
+        }
+
+        if (typeof events == "string") {
+            if (events.indexOf(",") > -1) {
+                events = events.split(",");
+            } else {
+                events = events.split(/\s/);
+            }
+        }
+
+        var handler = findHandler(elm);
+
+        if (events) events.forEach(function(event) {
+
+            handler.unregister(event, callback, {
+                selector: selector,
+            });
+        });
+        return this;
+    }
+
+    /*   
+     * Attach an event handler function for one or more events to the selected elements.
+     * @param {HTMLElement} elm  
+     * @param {String} events
+     * @param {String　Optional} selector
+     * @param {Anything Optional} data
+     * @param {Function} callback
+     * @param {Boolean　Optional} one
+     */
+    function on(elm, events, selector, data, callback, one) {
+
+        var autoRemove, delegator;
+        if (langx.isPlainObject(events)) {
+            langx.each(events, function(type, fn) {
+                on(elm, type, selector, data, fn, one);
+            });
+            return this;
+        }
+
+        if (!langx.isString(selector) && !langx.isFunction(callback)) {
+            callback = data;
+            data = selector;
+            selector = undefined;
+        }
+
+        if (langx.isFunction(data)) {
+            callback = data;
+            data = undefined;
+        }
+
+        if (callback === false) {
+            callback = langx.returnFalse;
+        }
+
+        if (typeof events == "string") {
+            if (events.indexOf(",") > -1) {
+                events = events.split(",");
+            } else {
+                events = events.split(/\s/);
+            }
+        }
+
+        var handler = findHandler(elm);
+
+        events.forEach(function(event) {
+            if (event == "ready") {
+                return ready(callback);
+            }
+            handler.register(event, callback, {
+                data: data,
+                selector: selector,
+                one: !!one
+            });
+        });
+        return this;
+    }
+
+    /*   
+     * Attach a handler to an event for the elements. The handler is executed at most once per 
+     * @param {HTMLElement} elm  
+     * @param {String} event
+     * @param {String　Optional} selector
+     * @param {Anything Optional} data
+     * @param {Function} callback
+     */
+    function one(elm, events, selector, data, callback) {
+        on(elm, events, selector, data, callback, 1);
+
+        return this;
+    }
+
+    /*   
+     * Prevents propagation and clobbers the default action of the passed event. The same as calling event.preventDefault() and event.stopPropagation(). 
+     * @param {String} event
+     */
+    function stop(event) {
+        if (window.document.all) {
+            event.keyCode = 0;
+        }
+        if (event.preventDefault) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+        return this;
+    }
+    /*   
+     * Execute all handlers and behaviors attached to the matched elements for the given event  
+     * @param {String} evented
+     * @param {String} type
+     * @param {Array or PlainObject } args
+     */
+    function trigger(evented, type, args) {
+        var e;
+        if (type instanceof Event) {
+            e = type;
+        } else {
+            e = createEvent(type, args);
+        }
+        e._args = args;
+
+        var fn = (evented.dispatchEvent || evented.trigger);
+        if (fn) {
+            fn.call(evented, e);
+        } else {
+            console.warn("The evented parameter is not a eventable object");
+        }
+
+        return this;
+    }
+    /*   
+     * Specify a function to execute when the DOM is fully loaded.  
+     * @param {Function} callback
+     */
+    function ready(callback) {
+        // need to check if document.body exists for IE as that browser reports
+        // document ready when it hasn't yet created the body elm
+        if (readyRE.test(document.readyState) && document.body) {
+            langx.defer(callback);
+        } else {
+            document.addEventListener('DOMContentLoaded', callback, false);
+        }
+
+        return this;
+    }
+
+    var keyCodeLookup = {
+        "backspace": 8,
+        "comma": 188,
+        "delete": 46,
+        "down": 40,
+        "end": 35,
+        "enter": 13,
+        "escape": 27,
+        "home": 36,
+        "left": 37,
+        "page_down": 34,
+        "page_up": 33,
+        "period": 190,
+        "right": 39,
+        "space": 32,
+        "tab": 9,
+        "up": 38
+    };
+    //example:
+    //shortcuts(elm).add("CTRL+ALT+SHIFT+X",function(){console.log("test!")});
+    function shortcuts(elm) {
+
+        var registry = datax.data(elm, "shortcuts");
+        if (!registry) {
+            registry = {};
+            datax.data(elm, "shortcuts", registry);
+            var run = function(shortcut, event) {
+                var n = event.metaKey || event.ctrlKey;
+                if (shortcut.ctrl == n && shortcut.alt == event.altKey && shortcut.shift == event.shiftKey) {
+                    if (event.keyCode == shortcut.keyCode || event.charCode && event.charCode == shortcut.charCode) {
+                        event.preventDefault();
+                        if ("keydown" == event.type) {
+                            shortcut.fn(event);
+                        }
+                        return true;
+                    }
+                }
+            };
+            on(elm, "keyup keypress keydown", function(event) {
+                if (!(/INPUT|TEXTAREA/.test(event.target.nodeName))) {
+                    for (var key in registry) {
+                        run(registry[key], event);
+                    }
+                }
+            });
+
+        }
+
+        return {
+            add: function(pattern, fn) {
+                var shortcutKeys;
+                if (pattern.indexOf(",") > -1) {
+                    shortcutKeys = pattern.toLowerCase().split(",");
+                } else {
+                    shortcutKeys = pattern.toLowerCase().split(" ");
+                }
+                shortcutKeys.forEach(function(shortcutKey) {
+                    var setting = {
+                        fn: fn,
+                        alt: false,
+                        ctrl: false,
+                        shift: false
+                    };
+                    shortcutKey.split("+").forEach(function(key) {
+                        switch (key) {
+                            case "alt":
+                            case "ctrl":
+                            case "shift":
+                                setting[key] = true;
+                                break;
+                            default:
+                                setting.charCode = key.charCodeAt(0);
+                                setting.keyCode = keyCodeLookup[key] || key.toUpperCase().charCodeAt(0);
+                        }
+                    });
+                    var regKey = (setting.ctrl ? "ctrl" : "") + "," + (setting.alt ? "alt" : "") + "," + (setting.shift ? "shift" : "") + "," + setting.keyCode;
+                    registry[regKey] = setting;
+                })
+            }
+
+        };
+
+    }
+
+    if (browser.support.transition) {
+        specialEvents.transitionEnd = {
+//          handle: function (e) {
+//            if ($(e.target).is(this)) return e.handleObj.handler.apply(this, arguments)
+//          },
+          bindType: browser.support.transition.end,
+          delegateType: browser.support.transition.end
+        }        
+    }
+
+    function eventer() {
+        return eventer;
+    }
+
+    langx.mixin(eventer, {
+        NativeEvents : NativeEvents,
+        
+        create: createEvent,
+
+        keys: keyCodeLookup,
+
+        off: off,
+
+        on: on,
+
+        one: one,
+
+        proxy: createProxy,
+
+        ready: ready,
+
+        shortcuts: shortcuts,
+
+        special: specialEvents,
+
+        stop: stop,
+
+        trigger: trigger
+
+    });
+
+    each(NativeEvents,function(name){
+        eventer[name] = function(elm,selector,data,callback) {
+            if (arguments.length>1) {
+                return this.on(elm,name,selector,data,callback);
+            } else {
+                if (name == "focus") {
+                    if (elm.focus) {
+                        elm.focus();
+                    }
+                } else if (name == "blur") {
+                    if (elm.blur) {
+                        elm.blur();
+                    }
+                } else if (name == "click") {
+                    if (elm.click) {
+                        elm.click();
+                    }
+                } else {
+                    this.trigger(elm,name);
+                }
+
+                return this;
+            }
+        };
+    });
+
+    return skylark.attach("domx.eventer",eventer);
+});
+define('skylark-domx-eventer/main',[
+    "skylark-langx/langx",
+    "./eventer",
+    "skylark-domx-velm",
+    "skylark-domx-query"        
+],function(langx,eventer,velm,$){
+
+    var delegateMethodNames = [
+        "off",
+        "on",
+        "one",
+        "trigger"
+    ];
+
+    langx.each(eventer.NativeEvents,function(name){
+        delegateMethodNames.push(name);
+    });
+
+    // from ./eventer
+    velm.delegate(delegateMethodNames, eventer);
+
+    langx.each(delegateMethodNames,function(i,name){
+        $.fn[name] = $.wraps.wrapper_every_act(eventer[name],eventer);
+    });
+
+
+    /*
+    $.fn.on = $.wraps.wrapper_every_act(eventer.on, eventer);
+
+    $.fn.off = $.wraps.wrapper_every_act(eventer.off, eventer);
+
+    $.fn.trigger = $.wraps.wrapper_every_act(eventer.trigger, eventer);
+
+    ('focusin focusout focus blur load resize scroll unload click dblclick ' +
+        'mousedown mouseup mousemove mouseover mouseout mouseenter mouseleave ' +
+        'change select keydown keypress keyup error transitionEnd').split(' ').forEach(function(event) {
+        $.fn[event] = $.wraps.wrapper_every_act(eventer[event],eventer);
+    });
+
+    $.fn.one = function(event, selector, data, callback) {
+        if (!langx.isString(selector) && !langx.isFunction(callback)) {
+            callback = data;
+            data = selector;
+            selector = null;
+        }
+
+        if (langx.isFunction(data)) {
+            callback = data;
+            data = null;
+        }
+
+        return this.on(event, selector, data, callback, 1)
+    }; 
+    */
+
+    $.ready = eventer.ready;
+
+    return eventer;
+});
+define('skylark-domx-eventer', ['skylark-domx-eventer/main'], function (main) { return main; });
+
+define('skylark-domx-fx/fx',[
+    "skylark-langx/skylark",
+    "skylark-langx/langx",
+    "skylark-domx-browser",
+    "skylark-domx-noder",
+    "skylark-domx-geom",
+    "skylark-domx-styler",
+    "skylark-domx-eventer"
+], function(skylark, langx, browser, noder, geom, styler, eventer) {
+    var animationName,
+        animationDuration,
+        animationTiming,
+        animationDelay,
+        transitionProperty,
+        transitionDuration,
+        transitionTiming,
+        transitionDelay,
+
+        animationEnd = browser.normalizeCssEvent('AnimationEnd'),
+        transitionEnd = browser.normalizeCssEvent('TransitionEnd'),
+
+        supportedTransforms = /^((translate|rotate|scale)(X|Y|Z|3d)?|matrix(3d)?|perspective|skew(X|Y)?)$/i,
+        transform = browser.css3PropPrefix + "transform",
+        cssReset = {};
+
+
+    cssReset[animationName = browser.normalizeCssProperty("animation-name")] =
+        cssReset[animationDuration = browser.normalizeCssProperty("animation-duration")] =
+        cssReset[animationDelay = browser.normalizeCssProperty("animation-delay")] =
+        cssReset[animationTiming = browser.normalizeCssProperty("animation-timing-function")] = "";
+
+    cssReset[transitionProperty = browser.normalizeCssProperty("transition-property")] =
+        cssReset[transitionDuration = browser.normalizeCssProperty("transition-duration")] =
+        cssReset[transitionDelay = browser.normalizeCssProperty("transition-delay")] =
+        cssReset[transitionTiming = browser.normalizeCssProperty("transition-timing-function")] = "";
+
+
+
+    /*   
+     * Perform a custom animation of a set of CSS properties.
+     * @param {Object} elm  
+     * @param {Number or String} properties
+     * @param {String} ease
+     * @param {Number or String} duration
+     * @param {Function} callback
+     * @param {Number or String} delay
+     */
+    function animate(elm, properties, duration, ease, callback, delay) {
+        var key,
+            cssValues = {},
+            cssProperties = [],
+            transforms = "",
+            that = this,
+            endEvent,
+            wrappedCallback,
+            fired = false,
+            hasScrollTop = false,
+            resetClipAuto = false;
+
+        if (langx.isPlainObject(duration)) {
+            ease = duration.easing;
+            callback = duration.complete;
+            delay = duration.delay;
+            duration = duration.duration;
+        }
+
+        if (langx.isString(duration)) {
+            duration = fx.speeds[duration];
+        }
+        if (duration === undefined) {
+            duration = fx.speeds.normal;
+        }
+        duration = duration / 1000;
+        if (fx.off) {
+            duration = 0;
+        }
+
+        if (langx.isFunction(ease)) {
+            callback = ease;
+            eace = "swing";
+        } else {
+            ease = ease || "swing";
+        }
+
+        if (delay) {
+            delay = delay / 1000;
+        } else {
+            delay = 0;
+        }
+
+        if (langx.isString(properties)) {
+            // keyframe animation
+            cssValues[animationName] = properties;
+            cssValues[animationDuration] = duration + "s";
+            cssValues[animationTiming] = ease;
+            endEvent = animationEnd;
+        } else {
+            // CSS transitions
+            for (key in properties) {
+                var v = properties[key];
+                if (supportedTransforms.test(key)) {
+                    transforms += key + "(" + v + ") ";
+                } else {
+                    if (key === "scrollTop") {
+                        hasScrollTop = true;
+                    }
+                    if (key == "clip" && langx.isPlainObject(v)) {
+                        cssValues[key] = "rect(" + v.top+"px,"+ v.right +"px,"+ v.bottom +"px,"+ v.left+"px)";
+                        if (styler.css(elm,"clip") == "auto") {
+                            var size = geom.size(elm);
+                            styler.css(elm,"clip","rect("+"0px,"+ size.width +"px,"+ size.height +"px,"+"0px)");  
+                            resetClipAuto = true;
+                        }
+
+                    } else {
+                        cssValues[key] = v;
+                    }
+                    cssProperties.push(langx.dasherize(key));
+                }
+            }
+            endEvent = transitionEnd;
+        }
+
+        if (transforms) {
+            cssValues[transform] = transforms;
+            cssProperties.push(transform);
+        }
+
+        if (duration > 0 && langx.isPlainObject(properties)) {
+            cssValues[transitionProperty] = cssProperties.join(", ");
+            cssValues[transitionDuration] = duration + "s";
+            cssValues[transitionDelay] = delay + "s";
+            cssValues[transitionTiming] = ease;
+        }
+
+        wrappedCallback = function(event) {
+            fired = true;
+            if (event) {
+                if (event.target !== event.currentTarget) {
+                    return // makes sure the event didn't bubble from "below"
+                }
+                eventer.off(event.target, endEvent, wrappedCallback)
+            } else {
+                eventer.off(elm, animationEnd, wrappedCallback) // triggered by setTimeout
+            }
+            styler.css(elm, cssReset);
+            if (resetClipAuto) {
+ //               styler.css(elm,"clip","auto");
+            }
+            callback && callback.call(this);
+        };
+
+        if (duration > 0) {
+            eventer.on(elm, endEvent, wrappedCallback);
+            // transitionEnd is not always firing on older Android phones
+            // so make sure it gets fired
+            langx.debounce(function() {
+                if (fired) {
+                    return;
+                }
+                wrappedCallback.call(that);
+            }, ((duration + delay) * 1000) + 25)();
+        }
+
+        // trigger page reflow so new elements can animate
+        elm.clientLeft;
+
+        styler.css(elm, cssValues);
+
+        if (duration <= 0) {
+            langx.debounce(function() {
+                if (fired) {
+                    return;
+                }
+                wrappedCallback.call(that);
+            }, 0)();
+        }
+
+        if (hasScrollTop) {
+            scrollToTop(elm, properties["scrollTop"], duration, callback);
+        }
+
+        return this;
+    }
+
+    /*   
+     * Display an element.
+     * @param {Object} elm  
+     * @param {String} speed
+     * @param {Function} callback
+     */
+    function show(elm, speed, callback) {
+        styler.show(elm);
+        if (speed) {
+            if (!callback && langx.isFunction(speed)) {
+                callback = speed;
+                speed = "normal";
+            }
+            styler.css(elm, "opacity", 0)
+            animate(elm, { opacity: 1, scale: "1,1" }, speed, callback);
+        }
+        return this;
+    }
+
+
+    /*   
+     * Hide an element.
+     * @param {Object} elm  
+     * @param {String} speed
+     * @param {Function} callback
+     */
+    function hide(elm, speed, callback) {
+        if (speed) {
+            if (!callback && langx.isFunction(speed)) {
+                callback = speed;
+                speed = "normal";
+            }
+            animate(elm, { opacity: 0, scale: "0,0" }, speed, function() {
+                styler.hide(elm);
+                if (callback) {
+                    callback.call(elm);
+                }
+            });
+        } else {
+            styler.hide(elm);
+        }
+        return this;
+    }
+
+    /*   
+     * Set the vertical position of the scroll bar for an element.
+     * @param {Object} elm  
+     * @param {Number or String} pos
+     * @param {Number or String} speed
+     * @param {Function} callback
+     */
+    function scrollToTop(elm, pos, speed, callback) {
+        var scrollFrom = parseInt(elm.scrollTop),
+            i = 0,
+            runEvery = 5, // run every 5ms
+            freq = speed * 1000 / runEvery,
+            scrollTo = parseInt(pos);
+
+        var interval = setInterval(function() {
+            i++;
+
+            if (i <= freq) elm.scrollTop = (scrollTo - scrollFrom) / freq * i + scrollFrom;
+
+            if (i >= freq + 1) {
+                clearInterval(interval);
+                if (callback) langx.debounce(callback, 1000)();
+            }
+        }, runEvery);
+    }
+
+    /*   
+     * Display or hide an element.
+     * @param {Object} elm  
+     * @param {Number or String} speed
+     * @param {Function} callback
+     */
+    function toggle(elm, speed, callback) {
+        if (styler.isInvisible(elm)) {
+            show(elm, speed, callback);
+        } else {
+            hide(elm, speed, callback);
+        }
+        return this;
+    }
+
+    /*   
+     * Adjust the opacity of an element.
+     * @param {Object} elm  
+     * @param {Number or String} speed
+     * @param {Number or String} opacity
+     * @param {String} easing
+     * @param {Function} callback
+     */
+    function fadeTo(elm, speed, opacity, easing, callback) {
+        animate(elm, { opacity: opacity }, speed, easing, callback);
+        return this;
+    }
+
+
+    /*   
+     * Display an element by fading them to opaque.
+     * @param {Object} elm  
+     * @param {Number or String} speed
+     * @param {String} easing
+     * @param {Function} callback
+     */
+    function fadeIn(elm, speed, easing, callback) {
+        var target = styler.css(elm, "opacity");
+        if (target > 0) {
+            styler.css(elm, "opacity", 0);
+        } else {
+            target = 1;
+        }
+        styler.show(elm);
+
+        fadeTo(elm, speed, target, easing, callback);
+
+        return this;
+    }
+
+    /*   
+     * Hide an element by fading them to transparent.
+     * @param {Object} elm  
+     * @param {Number or String} speed
+     * @param {String} easing
+     * @param {Function} callback
+     */
+    function fadeOut(elm, speed, easing, callback) {
+        var _elm = elm,
+            complete,
+            opacity = styler.css(elm,"opacity"),
+            options = {};
+
+        if (langx.isPlainObject(speed)) {
+            options.easing = speed.easing;
+            options.duration = speed.duration;
+            complete = speed.complete;
+        } else {
+            options.duration = speed;
+            if (callback) {
+                complete = callback;
+                options.easing = easing;
+            } else {
+                complete = easing;
+            }
+        }
+        options.complete = function() {
+            styler.css(elm,"opacity",opacity);
+            styler.hide(elm);
+            if (complete) {
+                complete.call(elm);
+            }
+        }
+
+        fadeTo(elm, options, 0);
+
+        return this;
+    }
+
+    /*   
+     * Display or hide an element by animating its opacity.
+     * @param {Object} elm  
+     * @param {Number or String} speed
+     * @param {String} ceasing
+     * @param {Function} callback
+     */
+    function fadeToggle(elm, speed, ceasing, allback) {
+        if (styler.isInvisible(elm)) {
+            fadeIn(elm, speed, easing, callback);
+        } else {
+            fadeOut(elm, speed, easing, callback);
+        }
+        return this;
+    }
+
+    /*   
+     * Display an element with a sliding motion.
+     * @param {Object} elm  
+     * @param {Number or String} duration
+     * @param {Function} callback
+     */
+    function slideDown(elm, duration, callback) {
+
+        // get the element position to restore it then
+        var position = styler.css(elm, 'position');
+
+        // show element if it is hidden
+        show(elm);
+
+        // place it so it displays as usually but hidden
+        styler.css(elm, {
+            position: 'absolute',
+            visibility: 'hidden'
+        });
+
+        // get naturally height, margin, padding
+        var marginTop = styler.css(elm, 'margin-top');
+        var marginBottom = styler.css(elm, 'margin-bottom');
+        var paddingTop = styler.css(elm, 'padding-top');
+        var paddingBottom = styler.css(elm, 'padding-bottom');
+        var height = styler.css(elm, 'height');
+
+        // set initial css for animation
+        styler.css(elm, {
+            position: position,
+            visibility: 'visible',
+            overflow: 'hidden',
+            height: 0,
+            marginTop: 0,
+            marginBottom: 0,
+            paddingTop: 0,
+            paddingBottom: 0
+        });
+
+        // animate to gotten height, margin and padding
+        animate(elm, {
+            height: height,
+            marginTop: marginTop,
+            marginBottom: marginBottom,
+            paddingTop: paddingTop,
+            paddingBottom: paddingBottom
+        }, {
+            duration: duration,
+            complete: function() {
+                if (callback) {
+                    callback.apply(elm);
+                }
+            }
+        });
+
+        return this;
+    }
+
+    /*   
+     * Hide an element with a sliding motion.
+     * @param {Object} elm  
+     * @param {Number or String} duration
+     * @param {Function} callback
+     */
+    function slideUp(elm, duration, callback) {
+        // active the function only if the element is visible
+        if (geom.height(elm) > 0) {
+
+            // get the element position to restore it then
+            var position = styler.css(elm, 'position');
+
+            // get the element height, margin and padding to restore them then
+            var height = styler.css(elm, 'height');
+            var marginTop = styler.css(elm, 'margin-top');
+            var marginBottom = styler.css(elm, 'margin-bottom');
+            var paddingTop = styler.css(elm, 'padding-top');
+            var paddingBottom = styler.css(elm, 'padding-bottom');
+
+            // set initial css for animation
+            styler.css(elm, {
+                visibility: 'visible',
+                overflow: 'hidden',
+                height: height,
+                marginTop: marginTop,
+                marginBottom: marginBottom,
+                paddingTop: paddingTop,
+                paddingBottom: paddingBottom
+            });
+
+            // animate element height, margin and padding to zero
+            animate(elm, {
+                height: 0,
+                marginTop: 0,
+                marginBottom: 0,
+                paddingTop: 0,
+                paddingBottom: 0
+            }, {
+                // callback : restore the element position, height, margin and padding to original values
+                duration: duration,
+                queue: false,
+                complete: function() {
+                    hide(elm);
+                    styler.css(elm, {
+                        visibility: 'visible',
+                        overflow: 'hidden',
+                        height: height,
+                        marginTop: marginTop,
+                        marginBottom: marginBottom,
+                        paddingTop: paddingTop,
+                        paddingBottom: paddingBottom
+                    });
+                    if (callback) {
+                        callback.apply(elm);
+                    }
+                }
+            });
+        }
+        return this;
+    }
+
+
+    /*   
+     * Display or hide an element with a sliding motion.
+     * @param {Object} elm  
+     * @param {Number or String} duration
+     * @param {Function} callback
+     */
+    function slideToggle(elm, duration, callback) {
+
+        // if the element is hidden, slideDown !
+        if (geom.height(elm) == 0) {
+            slideDown(elm, duration, callback);
+        }
+        // if the element is visible, slideUp !
+        else {
+            slideUp(elm, duration, callback);
+        }
+        return this;
+    }
+
+    function emulateTransitionEnd(elm,duration) {
+        var called = false;
+        eventer.one(elm,'transitionEnd', function () { 
+            called = true;
+        })
+        var callback = function () { 
+            if (!called) {
+                eventer.trigger(elm,browser.support.transition.end) 
+            }
+        };
+        setTimeout(callback, duration);
+        
+        return this;
+    } 
+
+    /*   
+     *
+     * @param {Node} elm
+     * @param {Node} params
+     */
+    function overlay(elm, params) {
+        var overlayDiv = noder.createElement("div", params);
+        styler.css(overlayDiv, {
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+            zIndex: 0x7FFFFFFF,
+            opacity: 0.7
+        });
+        elm.appendChild(overlayDiv);
+        return overlayDiv;
+
+    }
+    
+    /*   
+     * Replace an old node with the specified node.
+     * @param {HTMLElement} elm
+     * @param {Node} params
+     */
+    function throb(elm, params) {
+        params = params || {};
+        var self = this,
+            text = params.text,
+            style = params.style,
+            time = params.time,
+            callback = params.callback,
+            timer,
+
+            throbber = noder.createElement("div", {
+                "class": params.className || "throbber"
+            }),
+            _overlay = overlay(throbber, {
+                "class": 'overlay fade'
+            }),
+            throb = noder.createElement("div", {
+                "class": "throb"
+            }),
+            textNode = noder.createTextNode(text || ""),
+            remove = function() {
+                if (timer) {
+                    clearTimeout(timer);
+                    timer = null;
+                }
+                if (throbber) {
+                    noder.remove(throbber);
+                    throbber = null;
+                }
+            },
+            update = function(params) {
+                if (params && params.text && throbber) {
+                    textNode.nodeValue = params.text;
+                }
+            };
+        if (params.style) {
+            styler.css(throbber,params.style);
+        }
+        throb.appendChild(textNode);
+        throbber.appendChild(throb);
+        elm.appendChild(throbber);
+        var end = function() {
+            remove();
+            if (callback) callback();
+        };
+        if (time) {
+            timer = setTimeout(end, time);
+        }
+
+        return {
+            remove: remove,
+            update: update
+        };
+    }
+
+    function fx() {
+        return fx;
+    }
+
+    langx.mixin(fx, {
+        off: false,
+
+        speeds: {
+            normal: 400,
+            fast: 200,
+            slow: 600
+        },
+
+        animate,
+        emulateTransitionEnd,
+        fadeIn,
+        fadeOut,
+        fadeTo,
+        fadeToggle,
+        hide,
+        scrollToTop,
+
+        slideDown,
+        slideToggle,
+        slideUp,
+        show,
+        throb,
+        toggle
+    });
+
+    return skylark.attach("domx.fx", fx);
+});
+define('skylark-domx-fx/main',[
+	"./fx",
+	"skylark-domx-velm",
+	"skylark-domx-query"	
+],function(fx,velm,$){
+    // from ./fx
+    velm.delegate([
+        "animate",
+        "emulateTransitionEnd",
+        "fadeIn",
+        "fadeOut",
+        "fadeTo",
+        "fadeToggle",
+        "hide",
+        "scrollToTop",
+        "slideDown",
+        "slideToggle",
+        "slideUp",
+        "show",
+        "toggle"
+    ], fx);
+
+    $.fn.hide =  $.wraps.wrapper_every_act(fx.hide, fx);
+
+    $.fn.animate = $.wraps.wrapper_every_act(fx.animate, fx);
+    $.fn.emulateTransitionEnd = $.wraps.wrapper_every_act(fx.emulateTransitionEnd, fx);
+
+    $.fn.show = $.wraps.wrapper_every_act(fx.show, fx);
+    $.fn.hide = $.wraps.wrapper_every_act(fx.hide, fx);
+    $.fn.toogle = $.wraps.wrapper_every_act(fx.toogle, fx);
+    $.fn.fadeTo = $.wraps.wrapper_every_act(fx.fadeTo, fx);
+    $.fn.fadeIn = $.wraps.wrapper_every_act(fx.fadeIn, fx);
+    $.fn.fadeOut = $.wraps.wrapper_every_act(fx.fadeOut, fx);
+    $.fn.fadeToggle = $.wraps.wrapper_every_act(fx.fadeToggle, fx);
+
+    $.fn.slideDown = $.wraps.wrapper_every_act(fx.slideDown, fx);
+    $.fn.slideToggle = $.wraps.wrapper_every_act(fx.slideToggle, fx);
+    $.fn.slideUp = $.wraps.wrapper_every_act(fx.slideUp, fx);
+
+	return fx;
+});
+define('skylark-domx-fx', ['skylark-domx-fx/main'], function (main) { return main; });
+
+define('skylark-domx-plugins/plugins',[
+    "skylark-langx-ns",
+    "skylark-langx-types",
+    "skylark-langx-objects",
+    "skylark-langx-funcs",
+    "skylark-langx-events/Emitter",
+    "skylark-domx-noder",
+    "skylark-domx-data",
+    "skylark-domx-eventer",
+    "skylark-domx-finder",
+    "skylark-domx-geom",
+    "skylark-domx-styler",
+    "skylark-domx-fx",
+    "skylark-domx-query",
+    "skylark-domx-velm"
+], function(
+    skylark,
+    types,
+    objects,
+    funcs,
+    Emitter, 
+    noder, 
+    datax, 
+    eventer, 
+    finder, 
+    geom, 
+    styler, 
+    fx, 
+    $, 
+    elmx
+) {
+    "use strict";
+
+    var slice = Array.prototype.slice,
+        concat = Array.prototype.concat,
+        pluginKlasses = {},
+        shortcuts = {};
+
+    /*
+     * Create or get or destory a plugin instance assocated with the element.
+     */
+    function instantiate(elm,pluginName,options) {
+        var pair = pluginName.split(":"),
+            instanceDataName = pair[1];
+        pluginName = pair[0];
+
+        if (!instanceDataName) {
+            instanceDataName = pluginName;
+        }
+
+        var pluginInstance = datax.data( elm, instanceDataName );
+
+        if (options === "instance") {
+            return pluginInstance;
+        } else if (options === "destroy") {
+            if (!pluginInstance) {
+                throw new Error ("The plugin instance is not existed");
+            }
+            pluginInstance.destroy();
+            datax.removeData( elm, pluginName);
+            pluginInstance = undefined;
+        } else {
+            if (!pluginInstance) {
+                if (options !== undefined && typeof options !== "object") {
+                    throw new Error ("The options must be a plain object");
+                }
+                var pluginKlass = pluginKlasses[pluginName]; 
+                pluginInstance = new pluginKlass(elm,options);
+                datax.data( elm, instanceDataName,pluginInstance );
+            } else if (options) {
+                pluginInstance.reset(options);
+            }
+        }
+
+        return pluginInstance;
+    }
+
+
+    function shortcutter(pluginName,extfn) {
+       /*
+        * Create or get or destory a plugin instance assocated with the element,
+        * and also you can execute the plugin method directory;
+        */
+        return function (elm,options) {
+            var  plugin = instantiate(elm, pluginName,"instance");
+            if ( options === "instance" ) {
+              return plugin || null;
+            }
+
+            if (!plugin) {
+                plugin = instantiate(elm, pluginName,typeof options == 'object' && options || {});
+                if (typeof options != "string") {
+                  return this;
+                }
+            } 
+            if (options) {
+                var args = slice.call(arguments,1); //2
+                if (extfn) {
+                    return extfn.apply(plugin,args);
+                } else {
+                    if (typeof options == 'string') {
+                        var methodName = options;
+
+                        if ( !plugin ) {
+                            throw new Error( "cannot call methods on " + pluginName +
+                                " prior to initialization; " +
+                                "attempted to call method '" + methodName + "'" );
+                        }
+
+                        if ( !types.isFunction( plugin[ methodName ] ) || methodName.charAt( 0 ) === "_" ) {
+                            throw new Error( "no such method '" + methodName + "' for " + pluginName +
+                                " plugin instance" );
+                        }
+
+                        args = slice.call(args,1); //remove method name
+
+                        var ret = plugin[methodName].apply(plugin,args);
+                        if (ret == plugin) {
+                          ret = undefined;
+                        }
+
+                        return ret;
+                    }                
+                }                
+            }
+
+        }
+
+    }
+
+    /*
+     * Register a plugin type
+     */
+    function register( pluginKlass,shortcutName,instanceDataName,extfn) {
+        var pluginName = pluginKlass.prototype.pluginName;
+        
+        pluginKlasses[pluginName] = pluginKlass;
+
+        if (shortcutName) {
+            if (instanceDataName && types.isFunction(instanceDataName)) {
+                extfn = instanceDataName;
+                instanceDataName = null;
+            } 
+            if (instanceDataName) {
+                pluginName = pluginName + ":" + instanceDataName;
+            }
+
+            var shortcut = shortcuts[shortcutName] = shortcutter(pluginName,extfn);
+                
+            $.fn[shortcutName] = function(options) {
+                var returnValue = this;
+
+                if ( !this.length && options === "instance" ) {
+                  returnValue = undefined;
+                } else {
+                  var args = slice.call(arguments);
+                  this.each(function () {
+                    var args2 = slice.call(args);
+                    args2.unshift(this);
+                    var  ret  = shortcut.apply(undefined,args2);
+                    if (ret !== undefined) {
+                        returnValue = ret;
+                    }
+                  });
+                }
+
+                return returnValue;
+            };
+
+            elmx.partial(shortcutName,function(options) {
+                var  ret  = shortcut(this._elm,options);
+                if (ret === undefined) {
+                    ret = this;
+                }
+                return ret;
+            });
+
+        }
+    }
+
+ 
+    var Plugin =   Emitter.inherit({
+        klassName: "Plugin",
+
+        _construct : function(elm,options) {
+           this._elm = elm;
+           this._initOptions(options);
+        },
+
+        _initOptions : function(options) {
+          var ctor = this.constructor,
+              cache = ctor.cache = ctor.cache || {},
+              defaults = cache.defaults;
+          if (!defaults) {
+            var  ctors = [];
+            do {
+              ctors.unshift(ctor);
+              if (ctor === Plugin) {
+                break;
+              }
+              ctor = ctor.superclass;
+            } while (ctor);
+
+            defaults = cache.defaults = {};
+            for (var i=0;i<ctors.length;i++) {
+              ctor = ctors[i];
+              if (ctor.prototype.hasOwnProperty("options")) {
+                objects.mixin(defaults,ctor.prototype.options,true);
+              }
+              if (ctor.hasOwnProperty("options")) {
+                objects.mixin(defaults,ctor.options,true);
+              }
+            }
+          }
+          Object.defineProperty(this,"options",{
+            value :objects.mixin({},defaults,options,true)
+          });
+
+          //return this.options = langx.mixin({},defaults,options);
+          return this.options;
+        },
+
+
+        destroy: function() {
+
+            this._destroy();
+
+            // remove all event lisener
+            this.unlistenTo();
+            // remove data 
+            datax.removeData(this._elm,this.pluginName );
+        },
+
+        _destroy: funcs.noop,
+
+        _delay: function( handler, delay ) {
+            function handlerProxy() {
+                return ( typeof handler === "string" ? instance[ handler ] : handler )
+                    .apply( instance, arguments );
+            }
+            var instance = this;
+            return setTimeout( handlerProxy, delay || 0 );
+        },
+
+        _velm : function(elm) {
+            elm = elm || this._elm;
+            return elmx(elm);
+
+        },
+
+        _query : function(elm) {
+            elm = elm || this._elm;
+            return $(elm);
+        },
+
+        option: function( key, value ) {
+            var options = key;
+            var parts;
+            var curOption;
+            var i;
+
+            if ( arguments.length === 0 ) {
+
+                // Don't return a reference to the internal hash
+                return objects.mixin( {}, this.options );
+            }
+
+            if ( typeof key === "string" ) {
+
+                // Handle nested keys, e.g., "foo.bar" => { foo: { bar: ___ } }
+                options = {};
+                parts = key.split( "." );
+                key = parts.shift();
+                if ( parts.length ) {
+                    curOption = options[ key ] = objects.mixin( {}, this.options[ key ] );
+                    for ( i = 0; i < parts.length - 1; i++ ) {
+                        curOption[ parts[ i ] ] = curOption[ parts[ i ] ] || {};
+                        curOption = curOption[ parts[ i ] ];
+                    }
+                    key = parts.pop();
+                    if ( arguments.length === 1 ) {
+                        return curOption[ key ] === undefined ? null : curOption[ key ];
+                    }
+                    curOption[ key ] = value;
+                } else {
+                    if ( arguments.length === 1 ) {
+                        return this.options[ key ] === undefined ? null : this.options[ key ];
+                    }
+                    options[ key ] = value;
+                }
+            }
+
+            this._setOptions( options );
+
+            return this;
+        },
+
+        _setOptions: function( options ) {
+            var key;
+
+            for ( key in options ) {
+                this._setOption( key, options[ key ] );
+            }
+
+            return this;
+        },
+
+        _setOption: function( key, value ) {
+
+            this.options[ key ] = value;
+
+            return this;
+        },
+
+        getUID : function (prefix) {
+            prefix = prefix || "plugin";
+            do prefix += ~~(Math.random() * 1000000)
+            while (document.getElementById(prefix))
+            return prefix;
+        },
+
+        elm : function() {
+            return this._elm;
+        }
+
+    });
+
+    $.fn.plugin = function(name,options) {
+        var args = slice.call( arguments, 1 ),
+            self = this,
+            returnValue = this;
+
+        this.each(function(){
+            returnValue = instantiate.apply(self,[this,name].concat(args));
+        });
+        return returnValue;
+    };
+
+    elmx.partial("plugin",function(name,options) {
+        var args = slice.call( arguments, 1 );
+        return instantiate.apply(this,[this.domNode,name].concat(args));
+    }); 
+
+
+    function plugins() {
+        return plugins;
+    }
+     
+    objects.mixin(plugins, {
+        instantiate,
+        Plugin,
+        register,
+        shortcuts
+    });
+
+    return  skylark.attach("domx.plugins",plugins);
+});
+define('skylark-domx-plugins/main',[
+	"./plugins"
+],function(plugins){
+	return plugins;
+});
+define('skylark-domx-plugins', ['skylark-domx-plugins/main'], function (main) { return main; });
+
+define('skylark-domx-popups/Dropdown',[
+  "skylark-langx/langx",
+  "skylark-domx-browser",
+  "skylark-domx-eventer",
+  "skylark-domx-noder",
+  "skylark-domx-geom",
+  "skylark-domx-query",
+  "skylark-domx-plugins",
+  "./popups"
+],function(langx,browser,eventer,noder,geom,$,plugins,popups){
+
+  'use strict';
+
+  // DROPDOWN CLASS DEFINITION
+  // =========================
+
+  var backdrop = '.dropdown-backdrop';
+  var toggle   = '[data-toggle="dropdown"]';
+
+  var Dropdown = plugins.Plugin.inherit({
+    klassName: "Dropdown",
+
+    pluginName : "domx.dropdown",
+
+    options : {
+      "selectors" : {
+        "toggler" : '[data-toggle="dropdown"],.dropdown-menu'
+      }
+
+    },
+
+    _construct : function(elm,options) {
+      this.overrided(elm,options);
+
+      var $el = this.$element = $(this._elm);
+      $el.on('click.dropdown', this.toggle);
+      $el.on('keydown.dropdown', this.options.selectors.toggler,this.keydown);
+    },
+
+    toggle : function (e) {
+      var $this = $(this)
+
+      if ($this.is('.disabled, :disabled')) {
+        return;
+      }
+
+      var $parent  = getParent($this)
+      var isActive = $parent.hasClass('open');
+
+      clearMenus()
+
+      if (!isActive) {
+        if ('ontouchstart' in document.documentElement && !$parent.closest('.navbar-nav').length) {
+          // if mobile we use a backdrop because click events don't delegate
+          $(document.createElement('div'))
+            .addClass('dropdown-backdrop')
+            .insertAfter($(this))
+            .on('click', clearMenus)
+        }
+
+        var relatedTarget = { relatedTarget: this }
+        $parent.trigger(e = eventer.create('show.dropdown', relatedTarget))
+
+        if (e.isDefaultPrevented()) {
+          return;
+        }
+
+        $this
+          .trigger('focus')
+          .attr('aria-expanded', 'true')
+
+        $parent
+          .toggleClass('open')
+          .trigger(eventer.create('shown.dropdown', relatedTarget))
+      }
+
+      return false
+    },
+
+    keydown : function (e) {
+      if (!/(38|40|27|32)/.test(e.which) || /input|textarea/i.test(e.target.tagName)) {
+        return;
+      }
+
+      var $this = $(this);
+
+      e.preventDefault()
+      e.stopPropagation()
+
+      if ($this.is('.disabled, :disabled')) {
+        return;
+      }
+
+      var $parent  = getParent($this)
+      var isActive = $parent.hasClass('open')
+
+      if (!isActive && e.which != 27 || isActive && e.which == 27) {
+        if (e.which == 27) $parent.find(toggle).trigger('focus')
+        return $this.trigger('click')
+      }
+
+      var desc = ' li:not(.disabled):visible a'
+      var $items = $parent.find('.dropdown-menu' + desc)
+
+      if (!$items.length) return
+
+      var index = $items.index(e.target)
+
+      if (e.which == 38 && index > 0)                 index--         // up
+      if (e.which == 40 && index < $items.length - 1) index++         // down
+      if (!~index)                                    index = 0
+
+      $items.eq(index).trigger('focus');
+    }
+
+  });
+
+  function getParent($this) {
+    var selector = $this.attr('data-target')
+
+    if (!selector) {
+      selector = $this.attr('href')
+      selector = selector && /#[A-Za-z]/.test(selector) && selector.replace(/.*(?=#[^\s]*$)/, '') // strip for ie7
+    }
+
+    var $parent = selector && $(selector);
+
+    return $parent && $parent.length ? $parent : $this.parent();
+  }
+
+  function clearMenus(e) {
+    if (e && e.which === 3) return
+    $(backdrop).remove()
+    $(toggle).each(function () {
+      var $this         = $(this)
+      var $parent       = getParent($this)
+      var relatedTarget = { relatedTarget: this }
+
+      if (!$parent.hasClass('open')) return
+
+      if (e && e.type == 'click' && /input|textarea/i.test(e.target.tagName) && noder.contains($parent[0], e.target)) return
+
+      $parent.trigger(e = eventer.create('hide.dropdown', relatedTarget))
+
+      if (e.isDefaultPrevented()) return
+
+      $this.attr('aria-expanded', 'false')
+      $parent.removeClass('open').trigger(eventer.create('hidden.dropdown', relatedTarget))
+    })
+  }
+
+
+
+  // APPLY TO STANDARD DROPDOWN ELEMENTS
+  // ===================================
+  $(document)
+    .on('click.dropdown.data-api', clearMenus)
+    .on('click.dropdown.data-api', '.dropdown form', function (e) { e.stopPropagation() });
+
+  plugins.register(Dropdown);
+
+  return popups.Dropdown = Dropdown;
+
+});
+
+define('skylark-domx-popups/SelectList',[
+  "skylark-langx/langx",
+  "skylark-domx-browser",
+  "skylark-domx-eventer",
+  "skylark-domx-noder",
+  "skylark-domx-geom",
+  "skylark-domx-query",
+  "skylark-domx-plugins",
+  "./popups",
+  "./Dropdown"
+],function(langx,browser,eventer,noder,geom,$,plugins,popups,Dropdown){
+
+
+	// SELECT CONSTRUCTOR AND PROTOTYPE
+
+	var SelectList = plugins.Plugin.inherit({
+		klassName: "SelectList",
+
+		pluginName : "domx.selectlist",
+	
+		options : {
+			emptyLabelHTML: '<li data-value=""><a href="#">No items</a></li>'
+
+		},
+
+    	_construct : function(elm,options) {
+      		this.overrided(elm,options);
+      		this.$element = $(this._elm);
+			//this.options = langx.mixin({}, $.fn.selectlist.defaults, options);
+
+
+			this.$button = this.$element.find('.btn.dropdown-toggle');
+			this.$hiddenField = this.$element.find('.hidden-field');
+			this.$label = this.$element.find('.selected-label');
+			this.$dropdownMenu = this.$element.find('.dropdown-menu');
+
+			this.$button.plugin("domx.dropdown");
+
+			this.$element.on('click.selectlist', '.dropdown-menu a', langx.proxy(this.itemClicked, this));
+			this.setDefaultSelection();
+
+			if (this.options.resize === 'auto' || this.$element.attr('data-resize') === 'auto') {
+				this.resize();
+			}
+
+			// if selectlist is empty or is one item, disable it
+			var items = this.$dropdownMenu.children('li');
+			if( items.length === 0) {
+				this.disable();
+				this.doSelect( $(this.options.emptyLabelHTML));
+			}
+
+			// support jumping focus to first letter in dropdown when key is pressed
+			this.$element.on('shown.dropdown', function () {
+					var $this = $(this);
+					// attach key listener when dropdown is shown
+					$(document).on('keypress.selectlist', function(e){
+
+						// get the key that was pressed
+						var key = String.fromCharCode(e.which);
+						// look the items to find the first item with the first character match and set focus
+						$this.find("li").each(function(idx,item){
+							if ($(item).text().charAt(0).toLowerCase() === key) {
+								$(item).children('a').focus();
+								return false;
+							}
+						});
+
+				});
+			});
+
+			// unbind key event when dropdown is hidden
+			this.$element.on('hide.dropdown', function () {
+					$(document).off('keypress.selectlist');
+			});
+		},
+
+		_destroy: function () {
+			this.$element.remove();
+			// any external bindings
+			// [none]
+			// empty elements to return to original markup
+			// [none]
+			// returns string of markup
+			return this.$element[0].outerHTML;
+		},
+
+		doSelect: function ($item) {
+			var $selectedItem;
+			this.$selectedItem = $selectedItem = $item;
+
+			this.$hiddenField.val(this.$selectedItem.attr('data-value'));
+			this.$label.html($(this.$selectedItem.children()[0]).html());
+
+			// clear and set selected item to allow declarative init state
+			// unlike other controls, selectlist's value is stored internal, not in an input
+			this.$element.find('li').each(function () {
+				if ($selectedItem.is($(this))) {
+					$(this).attr('data-selected', true);
+				} else {
+					$(this).removeData('selected').removeAttr('data-selected');
+				}
+			});
+		},
+
+		itemClicked: function (e) {
+			this.$element.trigger('clicked.selectlist', this.$selectedItem);
+
+			e.preventDefault();
+			// ignore if a disabled item is clicked
+			if ($(e.currentTarget).parent('li').is('.disabled, :disabled')) { return; }
+
+			// is clicked element different from currently selected element?
+			if (!($(e.target).parent().is(this.$selectedItem))) {
+				this.itemChanged(e);
+			}
+
+			// return focus to control after selecting an option
+			this.$element.find('.dropdown-toggle').focus();
+		},
+
+		itemChanged: function (e) {
+			//selectedItem needs to be <li> since the data is stored there, not in <a>
+			this.doSelect($(e.target).closest('li'));
+
+			// pass object including text and any data-attributes
+			// to onchange event
+			var data = this.selectedItem();
+			// trigger changed event
+			this.$element.trigger('changed.selectlist', data);
+		},
+
+		resize: function () {
+			var width = 0;
+			var newWidth = 0;
+			var sizer = $('<div/>').addClass('selectlist-sizer');
+
+
+			if (Boolean($(document).find('html').hasClass('fuelux'))) {
+				// default behavior for fuel ux setup. means fuelux was a class on the html tag
+				$(document.body).append(sizer);
+			} else {
+				// fuelux is not a class on the html tag. So we'll look for the first one we find so the correct styles get applied to the sizer
+				$('.fuelux:first').append(sizer);
+			}
+
+			sizer.append(this.$element.clone());
+
+			this.$element.find('a').each(function () {
+				sizer.find('.selected-label').text($(this).text());
+				newWidth = sizer.find('.selectlist').outerWidth();
+				newWidth = newWidth + sizer.find('.sr-only').outerWidth();
+				if (newWidth > width) {
+					width = newWidth;
+				}
+			});
+
+			if (width <= 1) {
+				return;
+			}
+
+			this.$button.css('width', width);
+			this.$dropdownMenu.css('width', width);
+
+			sizer.remove();
+		},
+
+		selectedItem: function () {
+			var txt = this.$selectedItem.text();
+			return langx.mixin({
+				text: txt
+			}, this.$selectedItem.data());
+		},
+
+		selectByText: function (text) {
+			var $item = $([]);
+			this.$element.find('li').each(function () {
+				if ((this.textContent || this.innerText || $(this).text() || '').toLowerCase() === (text || '').toLowerCase()) {
+					$item = $(this);
+					return false;
+				}
+			});
+			this.doSelect($item);
+		},
+
+		selectByValue: function (value) {
+			var selector = 'li[data-value="' + value + '"]';
+			this.selectBySelector(selector);
+		},
+
+		selectByIndex: function (index) {
+			// zero-based index
+			var selector = 'li:eq(' + index + ')';
+			this.selectBySelector(selector);
+		},
+
+		selectBySelector: function (selector) {
+			var $item = this.$element.find(selector);
+			this.doSelect($item);
+		},
+
+		setDefaultSelection: function () {
+			var $item = this.$element.find('li[data-selected=true]').eq(0);
+
+			if ($item.length === 0) {
+				$item = this.$element.find('li').has('a').eq(0);
+			}
+
+			this.doSelect($item);
+		},
+
+		enable: function () {
+			this.$element.removeClass('disabled');
+			this.$button.removeClass('disabled');
+		},
+
+		disable: function () {
+			this.$element.addClass('disabled');
+			this.$button.addClass('disabled');
+		}
+
+	});	
+
+
+	SelectList.prototype.getValue = SelectList.prototype.selectedItem;
+
+
+    plugins.register(SelectList);
+
+	return popups.SelectList = SelectList;
+});
+
 define('skylark-domx-popups/main',[
 	"./popups",
-	"./calcOffset"
+	"./calcOffset",
+	"./Dropdown",
+	"./SelectList"
 ],function(popups){
 	return popups;
 });

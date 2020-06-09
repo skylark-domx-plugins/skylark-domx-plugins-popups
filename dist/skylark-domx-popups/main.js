@@ -5,5 +5,5 @@
  * @link www.skylarkjs.org
  * @license MIT
  */
-define(["./popups","./calcOffset"],function(e){return e});
+define(["./popups","./calcOffset","./Dropdown","./SelectList"],function(e){return e});
 //# sourceMappingURL=sourcemaps/main.js.map
