@@ -25,7 +25,7 @@ define([
 
     	_construct : function(elm,options) {
       		this.overrided(elm,options);
-      		this.$element = $(this._elm);
+      		this.$element = this.$();
 			//this.options = langx.mixin({}, $.fn.selectlist.defaults, options);
 
 
