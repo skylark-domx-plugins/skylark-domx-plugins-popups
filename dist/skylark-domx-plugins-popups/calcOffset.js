@@ -1,5 +1,5 @@
 /**
- * skylark-domx-popups - The skylark popup utility library for dom api extension.
+ * skylark-domx-plugins-popups - The skylark popup utility library for dom api extension.
  * @author Hudaokeji Co.,Ltd
  * @version v0.9.0
  * @link www.skylarkjs.org

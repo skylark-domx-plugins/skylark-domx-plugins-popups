@@ -1,22 +1,21 @@
 define([
-	"skylark-langx-ns"
-],function(skylark){
-
-	var stack = [];
-
-
-
+	"skylark-domx-geom",
+	"./popups"
+],function(
+	geom,
+	popups
+){
     /**
-    * get the offset below/above and left/right element depending on screen position
+    * checkOffset - get the offset below/above and left/right element depending on screen position
     * Thanks https://github.com/jquery/jquery-ui/blob/master/ui/jquery.ui.datepicker.js
     */
-    function around(ref) {
+    function calcOffset(popup, ref) {
         var extraY = 0;
         var dpSize = geom.size(popup);
         var dpWidth = dpSize.width;
         var dpHeight = dpSize.height;
         var refHeight = geom.height(ref);
-        var doc = ref.ownerDocument;
+        var doc = popup.ownerDocument;
         var docElem = doc.documentElement;
         var viewWidth = docElem.clientWidth + geom.scrollLeft(doc);
         var viewHeight = docElem.clientHeight + geom.scrollTop(doc);
@@ -44,54 +43,6 @@ define([
         };
     }
 
-
-	/*
-	 * Popup the ui elment at the specified position
-	 * @param popup  element to display
-	 * @param options
-	 *  - around {HtmlEleent}
-	 *  - at {x,y}
-	 *  - parent {}
-	 */
-
-	function open(popup,options) {
-		if (options.around) {
-			//A DOM node that should be used as a reference point for placing the pop-up. 
-		}
-
-	}
-
-	/*
-	 * Close specified popup and any popups that it parented.
-	 * If no popup is specified, closes all popups.
-     */
-	function close(popup) {
-		var count = 0;
-
-		if (popup) {
-			for (var i= stack.length-1; i>=0; i--) {
-				if (stack[i].popup == popup) {
-					count = stack.length - i; 
-					break;
-				}
-			}
-		} else {
-			count = stack.length;
-		}
-		for (var i=0; i<count ; i++ ) {
-			var top = stack.pop(),
-				popup1 = top.popup;
-			if (popup1.hide) {
-				popup1.hide();
-			} else {
-
-			}
-
-		} 
-	}
-	return skylark.attach("domx.plugins.popups",{
-		around,
-		open,
-		close
-	});
+    return popups.calcOffset = calcOffset;
+		
 });
