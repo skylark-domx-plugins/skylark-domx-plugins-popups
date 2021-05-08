@@ -238,7 +238,7 @@ define('skylark-domx-plugins-popups/Dropdown',[
   "skylark-domx-noder",
   "skylark-domx-geom",
   "skylark-domx-query",
-  "skylark-domx-plugins",
+  "skylark-domx-plugins-base",
   "./popups"
 ],function(langx,browser,eventer,noder,geom,$,plugins,popups){
 
@@ -403,7 +403,7 @@ define('skylark-domx-plugins-popups/ComboBox',[
   "skylark-domx-noder",
   "skylark-domx-geom",
   "skylark-domx-query",
-  "skylark-domx-plugins",
+  "skylark-domx-plugins-base",
   "./popups",
   "./Dropdown"
 ],function(langx,browser,eventer,noder,geom,$,plugins,popups,Dropdown){
@@ -731,7 +731,7 @@ define('skylark-domx-plugins-popups/SelectList',[
   "skylark-domx-noder",
   "skylark-domx-geom",
   "skylark-domx-query",
-  "skylark-domx-plugins",
+  "skylark-domx-plugins-base",
   "./popups",
   "./Dropdown"
 ],function(langx,browser,eventer,noder,geom,$,plugins,popups,Dropdown){

@@ -25,7 +25,7 @@
   "bugs": "https://github.com/skylark-domx/skylark-domx-plugins-popups/issues",
   "dependencies": {
     "skylark-domx-geom": "git+https://github.com/skylark-domx/skylark-domx-geom.git#master",
-    "skylark-domx-plugins": "git+https://github.com/skylark-domx/skylark-domx-plugins.git#master",
+    "skylark-domx-plugins-base": "git+https://github.com/skylark-domx-plugins/skylark-domx-plugins-base.git#master",
     "skylark-langx-ns": "git+https://github.com/skylark-langx/skylark-langx-ns.git#master"
   },
   "engines": {
