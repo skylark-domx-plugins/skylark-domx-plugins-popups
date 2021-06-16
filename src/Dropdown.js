@@ -20,7 +20,7 @@ define([
   var Dropdown = plugins.Plugin.inherit({
     klassName: "Dropdown",
 
-    pluginName : "domx.dropdown",
+    pluginName : "lark.popups.dropdown",
 
     options : {
       "selectors" : {

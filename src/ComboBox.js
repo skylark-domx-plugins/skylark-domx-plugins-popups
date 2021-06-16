@@ -16,7 +16,7 @@ define([
 	var ComboBox = plugins.Plugin.inherit({
 		klassName: "ComboBox",
 
-		pluginName : "domx.combobox",
+		pluginName : "lark.popups.combobox",
 
 		options : {
 
@@ -57,7 +57,7 @@ define([
 			this.$dropMenu = this.$element.find('.dropdown-menu');
 			this.$input = this.$element.find('input');
 			this.$button = this.$element.find('.btn');
-			this.$button.plugin("domx.dropdown");
+			this.$button.plugin("lark.popups.dropdown");
 			this.$inputGroupBtn = this.$element.find('.input-group-btn');
 
 			this.$element.on('click.lark', 'a', langx.proxy(this.itemclicked, this));
@@ -242,7 +242,7 @@ define([
 			);
 
 			if(this.options.showOptionsOnKeypress && !this.$inputGroupBtn.hasClass('open')){
-				this.$button.plugin("domx.dropdown").toggle();
+				this.$button.plugin("lark.popups.dropdown").toggle();
 				this.$input.focus();
 			}
 

@@ -253,7 +253,7 @@ define('skylark-domx-plugins-popups/Dropdown',[
   var Dropdown = plugins.Plugin.inherit({
     klassName: "Dropdown",
 
-    pluginName : "domx.dropdown",
+    pluginName : "lark.popups.dropdown",
 
     options : {
       "selectors" : {
@@ -414,7 +414,7 @@ define('skylark-domx-plugins-popups/ComboBox',[
 	var ComboBox = plugins.Plugin.inherit({
 		klassName: "ComboBox",
 
-		pluginName : "domx.combobox",
+		pluginName : "lark.popups.combobox",
 
 		options : {
 
@@ -455,7 +455,7 @@ define('skylark-domx-plugins-popups/ComboBox',[
 			this.$dropMenu = this.$element.find('.dropdown-menu');
 			this.$input = this.$element.find('input');
 			this.$button = this.$element.find('.btn');
-			this.$button.plugin("domx.dropdown");
+			this.$button.plugin("lark.popups.dropdown");
 			this.$inputGroupBtn = this.$element.find('.input-group-btn');
 
 			this.$element.on('click.lark', 'a', langx.proxy(this.itemclicked, this));
@@ -640,7 +640,7 @@ define('skylark-domx-plugins-popups/ComboBox',[
 			);
 
 			if(this.options.showOptionsOnKeypress && !this.$inputGroupBtn.hasClass('open')){
-				this.$button.plugin("domx.dropdown").toggle();
+				this.$button.plugin("lark.popups.dropdown").toggle();
 				this.$input.focus();
 			}
 
@@ -742,7 +742,7 @@ define('skylark-domx-plugins-popups/SelectList',[
 	var SelectList = plugins.Plugin.inherit({
 		klassName: "SelectList",
 
-		pluginName : "domx.selectlist",
+		pluginName : "lark.popups.selectlist",
 	
 		options : {
 			emptyLabelHTML: '<li data-value=""><a href="#">No items</a></li>'
@@ -760,7 +760,7 @@ define('skylark-domx-plugins-popups/SelectList',[
 			this.$label = this.$element.find('.selected-label');
 			this.$dropdownMenu = this.$element.find('.dropdown-menu');
 
-			this.$button.plugin("domx.dropdown");
+			this.$button.plugin("lark.popups.dropdown");
 
 			this.$element.on('click.selectlist', '.dropdown-menu a', langx.proxy(this.itemClicked, this));
 			this.setDefaultSelection();
