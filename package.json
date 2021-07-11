@@ -24,9 +24,9 @@
   "license": "MIT",
   "bugs": "https://github.com/skylark-domx/skylark-domx-plugins-popups/issues",
   "dependencies": {
-    "skylark-domx-geom": "git+https://github.com/skylark-domx/skylark-domx-geom.git#master",
-    "skylark-domx-plugins-base": "git+https://github.com/skylark-domx-plugins/skylark-domx-plugins-base.git#master",
-    "skylark-langx-ns": "git+https://github.com/skylark-langx/skylark-langx-ns.git#master"
+    "skylark-domx-geom": "git+https://github.com/skylark-domx/skylark-domx-geom.git",
+    "skylark-domx-plugins-base": "git+https://github.com/skylark-domx-plugins/skylark-domx-plugins-base.git",
+    "skylark-langx-ns": "git+https://github.com/skylark-langx/skylark-langx-ns.git"
   },
   "engines": {
     "node": ">=0.8.0"
