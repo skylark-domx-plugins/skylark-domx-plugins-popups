@@ -87,8 +87,10 @@
 })(function(define,require) {
 
 define('skylark-domx-plugins-popups/popups',[
-	"skylark-langx-ns"
-],function(skylark){
+	"skylark-langx-ns",
+	"skylark-domx-geom",
+	"skylark-domx-query"
+],function(skylark,geom,$){
 
 	var stack = [];
 
@@ -147,6 +149,16 @@ define('skylark-domx-plugins-popups/popups',[
 			//A DOM node that should be used as a reference point for placing the pop-up. 
 		}
 
+		let $popup = $(popup);
+
+		$popup.show()
+			  .removeAttr( "aria-hidden" )
+   			  .position( options.position );
+
+   		stack.push({
+   			popup : $popup[0]
+   		})
+
 	}
 
 	/*
@@ -157,6 +169,7 @@ define('skylark-domx-plugins-popups/popups',[
 		var count = 0;
 
 		if (popup) {
+			popup = $(popup)[0];
 			for (var i= stack.length-1; i>=0; i--) {
 				if (stack[i].popup == popup) {
 					count = stack.length - i; 
@@ -168,13 +181,9 @@ define('skylark-domx-plugins-popups/popups',[
 		}
 		for (var i=0; i<count ; i++ ) {
 			var top = stack.pop(),
-				popup1 = top.popup;
-			if (popup1.hide) {
-				popup1.hide();
-			} else {
-
-			}
-
+				$popup = $(top.popup);
+			$popup.hide()
+				.attr( "aria-hidden", "true" );
 		} 
 	}
 	return skylark.attach("domx.plugins.popups",{
