@@ -1,8 +1,9 @@
 define([
 	"skylark-langx-ns",
 	"skylark-domx-geom",
-	"skylark-domx-query"
-],function(skylark,geom,$){
+	"skylark-domx-query",
+    "skylark-domx-plugins-base/plugins"
+],function(skylark,geom,$,plugins){
 
 	var stack = [];
 
@@ -98,9 +99,9 @@ define([
 				.attr( "aria-hidden", "true" );
 		} 
 	}
-	return skylark.attach("domx.plugins.popups",{
+	return plugins.popups = {
 		around,
 		open,
 		close
-	});
+	};
 });
